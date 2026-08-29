@@ -1,0 +1,11 @@
+name: deep_research_bench
+# Official RACE + FACT pipeline (Ayanami0730/deep_research_bench).
+third_party_dir: third_party/deep_research_bench
+query_file: data/benchmarks/deep_research_bench/query.jsonl
+language: en
+workers: 4
+skip_cleaning: false
+run_race: true
+run_fact: true
+# FACT scraping needs JINA_API_KEY. Set false for RACE-only local iteration.
+require_jina: false
