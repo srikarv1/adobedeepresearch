@@ -4,9 +4,10 @@ RACE scores a report against a reference article, matched by exact prompt
 string, so exported prompts must come from the benchmark's own query file. FACT
 extracts citations, scrapes them, and validates each claim.
 
-Both judges run on Gemini (``utils/api.py`` builds a ``google-genai`` client),
-so ``GEMINI_API_KEY`` is the key that matters. FACT additionally scrapes through
-Jina and needs ``JINA_API_KEY``.
+Both judges use an OpenAI-compatible backend (``utils/api.py``), selected by
+``LLM_BACKEND``: ``openai`` (needs ``OPENAI_API_KEY``) or ``openrouter``
+(default, needs ``OPENROUTER_API_KEY``). FACT additionally scrapes through Jina
+and needs ``JINA_API_KEY``.
 """
 
 from __future__ import annotations
@@ -21,8 +22,15 @@ from adr.eval.procs import run_script
 from adr.eval.repos import find_deep_research_bench
 from adr.eval.scoring import parse_key_value_report
 
-JUDGE_KEY = "GEMINI_API_KEY"
 SCRAPE_KEY = "JINA_API_KEY"
+
+
+def _judge_key() -> tuple[str, str]:
+    """Return (key_env_name, backend_name) based on LLM_BACKEND."""
+    backend = os.environ.get("LLM_BACKEND", "openrouter").lower()
+    if backend == "openai":
+        return "OPENAI_API_KEY", backend
+    return "OPENROUTER_API_KEY", backend
 
 
 def run_deep_research_bench(
@@ -60,10 +68,11 @@ def run_deep_research_bench(
     result["repo"] = str(bench_root)
 
     env = dict(extra_env or {})
-    if not (os.environ.get(JUDGE_KEY) or env.get(JUDGE_KEY)):
+    key_name, backend = _judge_key()
+    if not (os.environ.get(key_name) or env.get(key_name)):
         result["reason"] = (
-            f"{JUDGE_KEY} is not set. RACE and FACT call Gemini via "
-            f"{bench_root / 'utils' / 'api.py'}."
+            f"{key_name} is not set (LLM_BACKEND={backend}). "
+            f"Set {key_name}, or switch backend via LLM_BACKEND=openai|openrouter."
         )
         return result
 

@@ -4,8 +4,9 @@ name: deep_research_bench
 third_party_dir: null
 query_file: data/benchmarks/deep_research_bench/query.jsonl
 
-# RACE and FACT call Gemini through the bench's utils/api.py, so the judge key is
-# GEMINI_API_KEY. FACT additionally scrapes cited pages and needs JINA_API_KEY.
+# RACE and FACT use an OpenAI-compatible backend (LLM_BACKEND=openai|openrouter).
+# Set OPENAI_API_KEY or OPENROUTER_API_KEY accordingly.
+# FACT additionally scrapes cited pages and needs JINA_API_KEY.
 language: en
 workers: 4
 skip_cleaning: false

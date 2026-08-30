@@ -235,9 +235,9 @@ def doctor_cmd() -> None:
         )
 
     for name, used_for in (
-        ("GEMINI_API_KEY", "DRB RACE + FACT judge"),
+        ("OPENAI_API_KEY", "DRB judge (LLM_BACKEND=openai) + all Gym judges"),
+        ("OPENROUTER_API_KEY", "DRB judge (LLM_BACKEND=openrouter, default)"),
         ("JINA_API_KEY", "DRB FACT scraping"),
-        ("OPENAI_API_KEY", "Gym quality / KPR / citation judge"),
         ("DEEPRESEARCHGYM_API_KEY", "Gym search backend"),
         ("TAVILY_API_KEY", "live web search"),
     ):

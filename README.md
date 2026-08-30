@@ -8,7 +8,7 @@ The harness owns everything except the agent: query loading, budgeted execution,
 
 Two things drive most of the structure here:
 
-**Judges are never reimplemented.** The official rubrics carry hard scoring rules — in DeepResearchGym, a report with no source URLs scores zero on Support, and any rubric deficiency caps the score at 8. Paraphrasing those prompts inflates scores and makes results incomparable to published numbers. So the harness writes each benchmark's expected file layout and then shells out to the upstream scripts, parsing their result files back into structured scores.
+**Judges are never reimplemented.** The official rubrics carry hard scoring rules, e.g. in DeepResearchGym a report with no source URLs scores zero on Support, and any rubric deficiency caps the score at 8. Paraphrasing those prompts inflates scores and makes results incomparable to published numbers. So the harness writes each benchmark's expected file layout and invokes the upstream judge functions directly, then aggregates raw results into structured scores.
 
 **Cost is measured, not self-reported.** Token and latency numbers would be worthless if they depended on an agent remembering to log them. `MeteredLLM` and `MeteredSearch` wrap the model and search clients before the agent ever sees them, so every call is counted whether or not the agent cooperates. Budgets are charged from the same place.
 
@@ -33,9 +33,9 @@ adr doctor          # shows which repos and keys resolved
 
 | Key | Needed for |
 |---|---|
-| `GEMINI_API_KEY` | DeepResearch Bench RACE + FACT. The bench's `utils/api.py` calls Gemini — not OpenAI, not OpenRouter. |
+| `OPENAI_API_KEY` | DeepResearch Bench RACE + FACT (with `LLM_BACKEND=openai`), and all Gym judges. Honours `OPENAI_BASE_URL` for local vLLM/Ollama. |
+| `OPENROUTER_API_KEY` | DeepResearch Bench RACE + FACT (with `LLM_BACKEND=openrouter`, the default). |
 | `JINA_API_KEY` | FACT only; it scrapes every cited page. |
-| `OPENAI_API_KEY` | All DeepResearchGym judges. Honours `OPENAI_BASE_URL`, so a local vLLM/Ollama server can judge. |
 | `DEEPRESEARCHGYM_API_KEY` | The Gym retrieval sandbox. |
 | `TAVILY_API_KEY` | Live web search, typical for DeepResearch Bench runs. |
 
@@ -51,7 +51,7 @@ The question is filled in from the benchmark. To score an off-benchmark query, p
 
 ```bash
 adr score --report myreport.md --question "Does creatine help with cognition?"
-adr score --report myreport.md --query-id 51 --dataset deep_research_bench
+adr score --report data/fixtures/sample_report_51.md --query-id 51 --dataset deep_research_bench
 adr score --reports-dir path/to/folder-of-q-and-a-files
 adr score --drb-jsonl path/to/raw.jsonl
 adr score --report myreport.md --query-id 923549 --local-only   # no judge calls
