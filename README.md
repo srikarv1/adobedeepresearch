@@ -1,152 +1,153 @@
 # Adobe Deep Research harness
 
-Evaluation-only scaffold for trying deep research agents on **DeepResearch Bench** and **DeepResearchGym**. The agent implementations are left for you; the harness already knows how to load queries, run an agent, record cost stats, and emit each bench’s official report format.
+An evaluation harness for testing deep research agent architectures on **DeepResearch Bench** (RACE + FACT) and **DeepResearchGym** (quality, key-point recall, citation faithfulness).
 
-## What this is (and is not)
+The harness owns everything except the agent: query loading, budgeted execution, cost measurement, export in each benchmark's official format, invocation of the official judges, and run-to-run comparison. Agent implementations are deliberately left as stubs.
 
-This repo does **not** implement PILOT or a full research agent. It implements the loop around them:
+## Design commitments
 
-1. Load queries from a bench
-2. Inject a model client and a search backend
-3. Call `agent.run(task, ctx)`
-4. Store the report + trajectory
-5. Export to the official bench format
-6. Optionally call the official judges
+Two things drive most of the structure here:
 
-Swap models without touching eval code. `openai_compat` talks to OpenAI, OpenRouter, vLLM, Ollama, or any other OpenAI-style server.
+**Judges are never reimplemented.** The official rubrics carry hard scoring rules — in DeepResearchGym, a report with no source URLs scores zero on Support, and any rubric deficiency caps the score at 8. Paraphrasing those prompts inflates scores and makes results incomparable to published numbers. So the harness writes each benchmark's expected file layout and then shells out to the upstream scripts, parsing their result files back into structured scores.
+
+**Cost is measured, not self-reported.** Token and latency numbers would be worthless if they depended on an agent remembering to log them. `MeteredLLM` and `MeteredSearch` wrap the model and search clients before the agent ever sees them, so every call is counted whether or not the agent cooperates. Budgets are charged from the same place.
+
+## Install
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+```
+
+Point the harness at the official judge repos. Existing clones anywhere on disk are symlinked rather than re-cloned:
+
+```bash
+bash scripts/bootstrap_third_party.sh
+adr doctor          # shows which repos and keys resolved
+```
+
+`adr doctor` is the fastest way to see why a judge is being skipped.
+
+### Which key does what
+
+| Key | Needed for |
+|---|---|
+| `GEMINI_API_KEY` | DeepResearch Bench RACE + FACT. The bench's `utils/api.py` calls Gemini — not OpenAI, not OpenRouter. |
+| `JINA_API_KEY` | FACT only; it scrapes every cited page. |
+| `OPENAI_API_KEY` | All DeepResearchGym judges. Honours `OPENAI_BASE_URL`, so a local vLLM/Ollama server can judge. |
+| `DEEPRESEARCHGYM_API_KEY` | The Gym retrieval sandbox. |
+| `TAVILY_API_KEY` | Live web search, typical for DeepResearch Bench runs. |
+
+## Score a question and report pair
+
+The quickest way to exercise the whole evaluation path. Matching a benchmark query id matters: RACE pairs your report to its reference article by exact prompt string, and key-point recall needs an id that has key points.
+
+```bash
+adr score --report myreport.md --query-id 923549
+```
+
+The question is filled in from the benchmark. To score an off-benchmark query, pass `--question` instead; you then get Gym quality but not key-point recall.
+
+```bash
+adr score --report myreport.md --question "Does creatine help with cognition?"
+adr score --report myreport.md --query-id 51 --dataset deep_research_bench
+adr score --reports-dir path/to/folder-of-q-and-a-files
+adr score --drb-jsonl path/to/raw.jsonl
+adr score --report myreport.md --query-id 923549 --local-only   # no judge calls
+```
+
+To check the wiring without a judge key, run `pytest tests/test_official_gym_wiring.py`. It drives the real upstream Gym scripts against a stub judge and asserts an exactly predictable aggregate.
+
+## Run an agent
+
+```bash
+adr run --config configs/default.yaml --limit 2          # fixture agent, mock LLM, mock corpus
+adr run --agent pilot --dataset deep_research_gym --limit 20 \
+  --llm openai_compat --search gym --official deep_research_gym
+```
+
+Then compare a baseline against a candidate. Quality, cost, and structure are reported separately, because "fewer tokens" and "higher score" should never be averaged into one number:
+
+```bash
+adr compare runs/<baseline> runs/<candidate>
+```
+
+## Implement an agent
+
+Fill in `src/adr/agents/deep_research.py` or `pilot.py`. The contract is one method:
+
+```python
+async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
+    # ctx.llm.complete(...)       metered automatically
+    # ctx.search.search / fetch   metered automatically
+    # return a Trajectory with report.article set
+```
+
+Register it in `src/adr/agents/registry.py`. `ResearchState` is optional but gives you an evidence pool with retain/prune/superseded, a subtask frontier, budget accounting, and `compact_stats()` for a small observation instead of raw passages.
+
+Budgets are charged as you spend. With `budget.enforce: true` the overrunning call raises `BudgetExceeded`; with `false` the overrun is recorded in `n_budget_violations` and the trajectory finishes.
 
 ## Layout
 
 ```
 src/adr/
-  agents/           # implement your agent here
-    base.py         # ResearchAgent + AgentContext
-    deep_research.py
-    pilot.py
-    fixture.py      # smoke-test double only
-    registry.py     # add a one-line builder when you create a new agent
-  core/             # shared types: Query, Budget, Evidence, Trajectory, ResearchState
-  llm/              # mock | openai_compat
-  tools/            # mock | gym (ClueWeb/FineWeb) | tavily
-  datasets/         # DeepResearch Bench + Gym query loaders
-  eval/             # exporters + official-bench runners + local metrics
-  runner/           # experiment driver
-  cli.py
-data/benchmarks/    # official query files (copied)
-configs/
-third_party/        # gitignored clones of the official eval repos
+  agents/         implement your agent here (deep_research.py, pilot.py are stubs)
+  core/
+    state.py      evidence pool, frontier, budget, compact_stats()
+    instrument.py MeteredLLM / MeteredSearch / CostMeter
+  llm/            mock | openai_compat
+  tools/          mock | gym (ClueWeb22 + FineWeb) | tavily
+  datasets/       official query loaders
+  eval/
+    exporters.py  official file formats
+    importers.py  arbitrary reports -> Trajectory
+    repos.py      locating the judge checkouts
+    scoring.py    upstream aggregation formulas + result parsers
+    deep_research_bench.py / deep_research_gym.py
+    compare.py    quality vs cost vs structure
+  runner/         experiment driver
+configs/          default + per-agent + per-bench
+data/benchmarks/  official query files, byte-identical to upstream
+third_party/      judge checkouts (gitignored)
 ```
 
-## Install
+## Metrics
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-```
+Local metrics need no judge and are always computed:
 
-Clone the official judge repos only when you want RACE / FACT / Gym LLM judges:
+| Metric | Meaning |
+|---|---|
+| `mean_tokens`, `mean_prompt_tokens`, `mean_completion_tokens` | measured at the client, not self-reported |
+| `mean_wall_s` | real end-to-end wall clock per query |
+| `mean_n_llm_calls`, `mean_n_searches`, `mean_n_reads` | measured call counts |
+| `mean_n_retained`, `mean_n_pruned`, `mean_prune_rate` | evidence pool churn |
+| `n_budget_violations` | queries that overran their budget |
 
-```bash
-bash scripts/bootstrap_third_party.sh
-```
+Judge metrics land in `summary.json` under `scores` (flattened, comparable) and `official` (full detail including subprocess logs):
 
-## Smoke test (no API keys)
+| Metric | Source |
+|---|---|
+| `race_overall_score` and its four dimensions | `race_result.txt` |
+| `fact_valid_rate`, `fact_total_citations` | `fact_result.txt` |
+| `gym_quality` plus per-criterion ratings | `quality_<judge>.json` |
+| `gym_average_support_rate` / `omitted` / `contradicted` | `relevance_<judge>.json` |
+| `gym_citation_score` | `faithfullness_<judge>.json` |
 
-```bash
-adr run --config configs/default.yaml --limit 2
-```
+## Report formats the judges expect
 
-This uses the `fixture` agent, a local mock corpus, and a mock LLM. It writes:
-
-```
-runs/<timestamp>-local-smoke/
-  reports/<id>.md
-  trajectories/<id>.json
-  exports/deep_research_gym/fixture/<id>.q
-  exports/deep_research_gym/fixture/<id>.a
-  metrics/local.json
-  metrics/summary.json
-```
-
-## Implement an agent
-
-Fill in `src/adr/agents/deep_research.py` (or `pilot.py`). The only required method:
-
-```python
-async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
-    # ctx.llm.complete(...)        any OpenAI-compatible model
-    # ctx.search.search / fetch    mock, DeepResearchGym, or Tavily
-    # return a Trajectory with report.article set
-```
-
-`ResearchState` is optional but useful: evidence pool, open branches, budget, `compact_stats()`, prune, trajectory logging.
-
-Register a new class in `src/adr/agents/registry.py`, then:
-
-```bash
-adr run --agent deep_research --dataset deep_research_gym --limit 5 \
-  --llm openai_compat --search gym
-```
-
-Point `llm.base_url` at a local vLLM / Ollama server if you are not using OpenAI.
-
-## Evaluate
-
-Local cost metrics (tokens, latency, steps, retained vs pruned evidence) never need a judge key:
-
-```bash
-adr evaluate runs/<run-id>
-```
-
-Official benches (needs keys + `third_party/`):
-
-```bash
-# DeepResearch Bench: RACE + FACT
-export OPENROUTER_API_KEY=...
-export JINA_API_KEY=...          # FACT only
-adr run --dataset deep_research_bench --language en --search tavily \
-  --official deep_research_bench
-
-# DeepResearchGym: quality + key-point recall
-export OPENAI_API_KEY=...
-export DEEPRESEARCHGYM_API_KEY=...
-adr run --dataset deep_research_gym --search gym \
-  --official deep_research_gym
-```
-
-Compare two runs:
-
-```bash
-adr compare runs/<a> runs/<b>
-```
-
-### Report formats the judges expect
-
-**DeepResearch Bench** (`data/test_data/raw_data/<name>.jsonl`):
+**DeepResearch Bench** — `data/test_data/raw_data/<model>.jsonl`, one row per query. The prompt must match the benchmark's query file exactly or RACE cannot find the reference article.
 
 ```json
 {"id": 51, "prompt": "...", "article": "...markdown with citations..."}
 ```
 
-**DeepResearchGym** (one folder per system):
-
-```
-<id>.q    # query text
-<id>.a    # report text
-```
-
-## Search backends
-
-| Backend | Use when |
-|---|---|
-| `mock` | Tests and dry runs |
-| `gym` | DeepResearchGym (ClueWeb22 / FineWeb `/search` + `/fetch`) |
-| `tavily` | Live web, typical for DeepResearch Bench / FACT |
+**DeepResearchGym** — one folder per system containing `<id>.q` (query) and `<id>.a` (report).
 
 ## Tests
 
 ```bash
 pytest
 ```
+
+The suite runs offline. `tests/test_official_gym_wiring.py` drives the real upstream Gym scripts against the mock judge and asserts an exactly predictable aggregate, so it fails if the invocation contract or the scoring math drifts. `tests/test_official_drb_wiring.py` does the same for RACE with a stub, without touching your checkout. Tests that need a judge repo skip themselves when it is absent.

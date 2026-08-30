@@ -14,12 +14,14 @@ from tqdm.asyncio import tqdm_asyncio
 
 from adr.agents.base import AgentContext
 from adr.agents.registry import build_agent
+from adr.core.instrument import CostMeter, MeteredLLM, MeteredSearch
 from adr.core.types import Budget, Query, ResearchTask, Trajectory
 from adr.datasets.loader import load_queries
 from adr.eval.deep_research_bench import run_deep_research_bench
 from adr.eval.deep_research_gym import run_deep_research_gym
 from adr.eval.exporters import export_deep_research_bench, export_deep_research_gym
 from adr.eval.local_metrics import compute_local_metrics, write_local_metrics
+from adr.eval.scoring import headline_scores
 from adr.llm.factory import build_llm
 from adr.tools.search import build_search
 
@@ -63,8 +65,8 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
     search = build_search(config.get("search") or {})
     agent_cfg = config.get("agent") or {}
     agent = build_agent(agent_cfg.get("name", "fixture"), agent_cfg.get("config"))
-    ctx = AgentContext(llm=llm, search=search, extra={"config": config})
-    budget_cfg = config.get("budget") or {}
+    budget_cfg = dict(config.get("budget") or {})
+    enforce_budget = bool(budget_cfg.pop("enforce", False))
 
     concurrency = max(1, int(config.get("concurrency", 1)))
     semaphore = asyncio.Semaphore(concurrency)
@@ -73,6 +75,13 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
     async def _one(query: Query) -> Trajectory:
         async with semaphore:
             task = ResearchTask(query=query, budget=Budget(**budget_cfg))
+            # Metered per query so cost is measured by the harness, not self-reported.
+            meter = CostMeter()
+            ctx = AgentContext(
+                llm=MeteredLLM(llm, meter, budget=task.budget, enforce=enforce_budget),
+                search=MeteredSearch(search, meter, budget=task.budget, enforce=enforce_budget),
+                extra={"config": config, "meter": meter},
+            )
             t0 = time.perf_counter()
             try:
                 traj = await agent.run(task, ctx)
@@ -81,8 +90,11 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
             except Exception as exc:
                 traj = Trajectory(query=query, error=f"{type(exc).__name__}: {exc}")
                 (run_dir / "errors" / f"{query.id}.txt").write_text(traceback.format_exc(), encoding="utf-8")
-            if traj.final_stats is not None:
-                traj.final_stats.setdefault("wall_s", round(time.perf_counter() - t0, 4))
+            if traj.final_stats is None:
+                traj.final_stats = {}
+            traj.final_stats["wall_s"] = round(time.perf_counter() - t0, 4)
+            traj.final_stats["usage"] = meter.snapshot()
+            traj.final_stats["budget_violations"] = list(meter.violations)
             _write_query_artifacts(run_dir, traj)
             return traj
 
@@ -109,6 +121,7 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
         "dataset": dataset_name,
         "n_queries": len(trajectories),
         **{k: v for k, v in metrics.items() if k != "per_query"},
+        "scores": headline_scores(official),
         "official": official,
     }
     (run_dir / "metrics" / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -135,6 +148,7 @@ def evaluate_run_dir(run_dir: Path, *, official_benches: list[str], config: dict
         "run_id": run_dir.name,
         "n_queries": len(trajectories),
         **{k: v for k, v in metrics.items() if k != "per_query"},
+        "scores": headline_scores(official),
         "official": official,
     }
     (run_dir / "metrics" / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -160,6 +174,7 @@ def _run_official(
             skip_cleaning=bool(eval_cfg.get("skip_cleaning", False)),
             run_race=bool(eval_cfg.get("run_race", True)),
             run_fact=bool(eval_cfg.get("run_fact", True)),
+            timeout_s=eval_cfg.get("timeout_s"),
         )
     if bench in {"deep_research_gym", "gym"}:
         eval_cfg = _eval_file(config, "deep_research_gym")
@@ -173,6 +188,7 @@ def _run_official(
             run_quality=bool(eval_cfg.get("run_quality", True)),
             run_kpr=bool(eval_cfg.get("run_kpr", True)),
             run_citation=bool(eval_cfg.get("run_citation", False)),
+            timeout_s=eval_cfg.get("timeout_s"),
         )
     raise ValueError(f"Unknown bench {bench!r}")
 
