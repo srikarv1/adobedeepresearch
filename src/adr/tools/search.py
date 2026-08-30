@@ -100,74 +100,101 @@ class MockSearch:
 
 
 class GymSearch:
-    """DeepResearchGym / ClueWeb / FineWeb retrieval sandbox."""
+    """DeepResearchGym retrieval sandbox over ClueWeb22 and FineWeb.
+
+    The corpus is selected by route, not by a parameter: ``/search`` serves
+    ClueWeb22 (licence-gated) and ``/fineweb/search`` serves FineWeb. See
+    https://clueweb22.us/openapi.json. Authentication is the ``x-api-key``
+    header.
+    """
 
     name = "gym"
+
+    CORPUS_ROUTES = {
+        "fineweb": "/fineweb/search",
+        "clueweb": "/search",
+        "clueweb22": "/search",
+        "clueweb22-b": "/search",
+        "clueweb22-a": "/search",
+    }
 
     def __init__(
         self,
         *,
+        base_url: str | None = None,
         search_url: str | None = None,
         fetch_url: str | None = None,
         api_key: str | None = None,
         corpus: str = "fineweb",
         timeout_s: float = 30.0,
     ) -> None:
-        self.search_url = (search_url or os.environ.get("DEEPRESEARCHGYM_SEARCH_URL") or "https://clueweb22.us/search").rstrip("/")
-        self.fetch_url = (fetch_url or os.environ.get("DEEPRESEARCHGYM_FETCH_URL") or "https://clueweb22.us/fetch").rstrip("/")
+        self.base_url = (
+            base_url or os.environ.get("DEEPRESEARCHGYM_BASE_URL") or "https://clueweb22.us"
+        ).rstrip("/")
+        self.corpus = (corpus or os.environ.get("DEEPRESEARCHGYM_CORPUS") or "fineweb").lower()
+        if self.corpus not in self.CORPUS_ROUTES:
+            raise ValueError(
+                f"Unknown Gym corpus {self.corpus!r}. Choose from {sorted(self.CORPUS_ROUTES)}"
+            )
+        self.cw22_a = self.corpus == "clueweb22-a"
+        self.search_url = (
+            search_url
+            or os.environ.get("DEEPRESEARCHGYM_SEARCH_URL")
+            or f"{self.base_url}{self.CORPUS_ROUTES[self.corpus]}"
+        )
+        # The hosted API has no archival fetch route; only set this if you run one.
+        self.fetch_url = fetch_url or os.environ.get("DEEPRESEARCHGYM_FETCH_URL") or ""
         self.api_key = api_key or os.environ.get("DEEPRESEARCHGYM_API_KEY") or ""
-        self.corpus = corpus or os.environ.get("DEEPRESEARCHGYM_CORPUS") or "fineweb"
         self.timeout_s = timeout_s
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
             headers["x-api-key"] = self.api_key
         return headers
 
     async def search(self, query: str, k: int = 5) -> list[SearchHit]:
-        params = {"query": query, "k": k, "corpus": self.corpus}
-        if self.api_key:
-            params["api_key"] = self.api_key
+        params: dict[str, Any] = {"query": query, "k": k, "with_distance": "true"}
+        if self.cw22_a:
+            params["cw22_a"] = "true"
         async with httpx.AsyncClient(timeout=self.timeout_s) as client:
             response = await client.get(self.search_url, params=params, headers=self._headers())
+            if response.status_code in (401, 403):
+                raise RuntimeError(
+                    f"DeepResearchGym rejected the request ({response.status_code}). "
+                    "Set DEEPRESEARCHGYM_API_KEY; ClueWeb22 also needs a data-use agreement."
+                )
             response.raise_for_status()
             payload = response.json()
-        rows = _extract_hits(payload)
-        hits: list[SearchHit] = []
-        for i, row in enumerate(rows[:k]):
-            url = str(row.get("url") or row.get("URL") or row.get("link") or "")
-            if not url:
-                continue
-            hits.append(
-                SearchHit(
-                    url=url,
-                    title=str(row.get("title") or row.get("name") or ""),
-                    snippet=str(row.get("snippet") or row.get("text") or row.get("preview") or ""),
-                    text=row.get("content") or row.get("clean_text"),
-                    score=float(row.get("score") or row.get("rerank_score") or (1.0 - i * 0.05)),
-                    doc_id=row.get("docid") or row.get("id"),
-                    raw=row,
-                )
-            )
-        return hits
+        return _gym_hits(payload, k)
 
     async def fetch(self, url: str) -> str:
-        params = {"url": url, "corpus": self.corpus}
-        if self.api_key:
-            params["api_key"] = self.api_key
+        """Return an archived snapshot, or empty string when no fetch route exists.
+
+        Returning empty rather than raising keeps agents that opportunistically
+        read full documents working against the hosted API, which only exposes
+        search. Point ``fetch_url`` at a local deployment to enable it.
+        """
+        if not self.fetch_url:
+            return ""
+        params = {"url": url}
         async with httpx.AsyncClient(timeout=self.timeout_s) as client:
             response = await client.get(self.fetch_url, params=params, headers=self._headers())
             if response.status_code >= 400:
-                # Some deployments use /fetch/<urlencoded-url>
-                alt = f"{self.fetch_url}/{quote(url, safe='')}"
+                alt = f"{self.fetch_url.rstrip('/')}/{quote(url, safe='')}"
                 response = await client.get(alt, headers=self._headers())
-            response.raise_for_status()
+            if response.status_code >= 400:
+                return ""
             if "application/json" in response.headers.get("content-type", ""):
                 payload = response.json()
                 if isinstance(payload, dict):
-                    return str(payload.get("text") or payload.get("content") or payload.get("clean_text") or "")
+                    return str(
+                        payload.get("Clean-Text")
+                        or payload.get("text")
+                        or payload.get("content")
+                        or payload.get("clean_text")
+                        or ""
+                    )
             return response.text
 
 
@@ -220,6 +247,34 @@ class TavilySearch:
         return ""
 
 
+def _gym_hits(payload: Any, k: int) -> list[SearchHit]:
+    """Map a Gym search payload to hits, tolerating ClueWeb and FineWeb field casing."""
+    hits: list[SearchHit] = []
+    for i, row in enumerate(_extract_hits(payload)[:k]):
+        url = str(row.get("URL") or row.get("url") or row.get("link") or "")
+        if not url:
+            continue
+        text = row.get("Clean-Text") or row.get("clean_text") or row.get("text") or row.get("content")
+        # Lower distance means closer, so invert it into a descending score.
+        distance = row.get("distance") or row.get("score")
+        try:
+            score = 1.0 / (1.0 + float(distance)) if distance is not None else 1.0 - i * 0.05
+        except (TypeError, ValueError):
+            score = 1.0 - i * 0.05
+        hits.append(
+            SearchHit(
+                url=url,
+                title=str(row.get("title") or row.get("Title") or ""),
+                snippet=str(row.get("snippet") or (text or "")[:600]),
+                text=text,
+                score=score,
+                doc_id=row.get("ClueWeb22-ID") or row.get("docid") or row.get("id"),
+                raw=row,
+            )
+        )
+    return hits
+
+
 def _extract_hits(payload: Any) -> list[dict]:
     if isinstance(payload, list):
         return [row for row in payload if isinstance(row, dict)]
@@ -239,11 +294,13 @@ def build_search(cfg: dict) -> SearchBackend:
     if backend == "mock":
         return MockSearch(path=cfg.get("corpus_path"))
     if backend in {"gym", "deepresearchgym", "clueweb", "fineweb"}:
+        corpus = cfg.get("corpus") or ("clueweb22" if backend == "clueweb" else "fineweb")
         return GymSearch(
+            base_url=cfg.get("base_url"),
             search_url=cfg.get("search_url"),
             fetch_url=cfg.get("fetch_url"),
             api_key=cfg.get("api_key"),
-            corpus=cfg.get("corpus", "fineweb"),
+            corpus=corpus,
         )
     if backend == "tavily":
         return TavilySearch(api_key=cfg.get("api_key"))

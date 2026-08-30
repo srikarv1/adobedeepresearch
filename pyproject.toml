@@ -40,7 +40,7 @@ include = ["/src", "/README.md", "/configs", "/scripts"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]

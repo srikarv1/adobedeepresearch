@@ -1,10 +1,22 @@
-from adr.eval.local_metrics import compute_local_metrics
-from adr.eval.exporters import export_deep_research_bench, export_deep_research_gym
 from adr.eval.compare import compare_summaries
+from adr.eval.exporters import export_deep_research_bench, export_deep_research_gym
+from adr.eval.importers import (
+    trajectories_from_drb_jsonl,
+    trajectories_from_gym_folder,
+    trajectory_from_pair,
+    write_trajectories,
+)
+from adr.eval.local_metrics import compute_local_metrics
+from adr.eval.scoring import headline_scores
 
 __all__ = [
+    "compare_summaries",
     "compute_local_metrics",
     "export_deep_research_bench",
     "export_deep_research_gym",
-    "compare_summaries",
+    "headline_scores",
+    "trajectories_from_drb_jsonl",
+    "trajectories_from_gym_folder",
+    "trajectory_from_pair",
+    "write_trajectories",
 ]

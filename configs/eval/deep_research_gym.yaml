@@ -1,11 +1,18 @@
 name: deep_research_gym
-# Official quality / citation / KPR protocol (cxcscmu/deepresearch_benchmarking).
-third_party_dir: third_party/deepresearch_benchmarking
+# Official quality / KPR / citation judges. Leave third_party_dir null to let the
+# harness search third_party/, then ADR_GYM_DIR, then a sibling clone.
+# Accepts Flitternie/deepresearchgym or cxcscmu/deepresearch_benchmarking layouts.
+third_party_dir: null
+key_point_dir: null
 query_file: data/benchmarks/deep_research_gym/researchy_queries_sample_doc_click.jsonl
-key_point_dir: third_party/deepresearch_benchmarking/key_point
+
+# Judge model. Needs OPENAI_API_KEY; set OPENAI_BASE_URL for a compatible server.
 judge_model: gpt-4.1-mini
+
 run_quality: true
 run_kpr: true
-# Citation checking crawls live pages and is slow / expensive.
+# Citation faithfulness crawls every cited page with crawl4ai. Slow and expensive.
 run_citation: false
-concurrency: 8
+
+# Seconds before a judge subprocess is abandoned. null waits forever.
+timeout_s: null

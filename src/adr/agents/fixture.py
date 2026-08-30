@@ -28,11 +28,23 @@ class FixtureAgent:
             OrchestratorAction(type=ActionType.SEARCH, query=query, rationale="fixture search"),
             observation=f"retrieved {len(added)} passages",
         )
-        article = _render_report(task.query.text, state)
+        # One model call so a smoke run exercises the cost instrumentation too.
+        synthesis = await ctx.llm.complete(
+            [
+                {"role": "system", "content": "Summarize the evidence in one sentence."},
+                {
+                    "role": "user",
+                    "content": f"Question: {task.query.text}\n\n"
+                    + "\n".join(ev.body(300) for ev in state.retained()),
+                },
+            ]
+        )
+        article = _render_report(task.query.text, state, synthesis.text)
         state.report = Report(article=article, citations=state.citation_urls())
         state.record_step(
             OrchestratorAction(type=ActionType.WRITE, report_draft=article, rationale="fixture write"),
             observation="wrote report from retrieved passages",
+            tokens=synthesis.usage,
         )
         state.record_step(
             OrchestratorAction(type=ActionType.TERMINATE, rationale="fixture done"),
@@ -41,7 +53,7 @@ class FixtureAgent:
         return state.trajectory()
 
 
-def _render_report(question: str, state: ResearchState) -> str:
+def _render_report(question: str, state: ResearchState, synthesis: str = "") -> str:
     lines = [
         f"# Research report",
         "",
@@ -50,6 +62,8 @@ def _render_report(question: str, state: ResearchState) -> str:
         "This fixture report exists so the evaluation harness can be tested without a real agent.",
         "",
     ]
+    if synthesis.strip():
+        lines += [synthesis.strip(), ""]
     for i, ev in enumerate(state.retained(), start=1):
         body = ev.body(400)
         lines.append(f"## {ev.title or f'Source {i}'}")
