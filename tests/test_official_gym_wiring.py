@@ -72,7 +72,7 @@ def test_official_gym_judges_run_and_aggregate(tmp_path: Path, monkeypatch):
     assert result["official"] is True, result
 
     quality = result["quality"]
-    assert quality["log"]["ok"], quality["log"]
+    assert "error" not in quality, quality.get("error")
     assert quality["n"] == 1
     assert quality["average_normalized_score"] == pytest.approx(EXPECTED_QUALITY)
     assert set(quality["per_criterion"]) == {
@@ -85,7 +85,7 @@ def test_official_gym_judges_run_and_aggregate(tmp_path: Path, monkeypatch):
     }
 
     kpr = result["kpr"]
-    assert kpr["log"]["ok"], kpr["log"]
+    assert "error" not in kpr, kpr.get("error")
     assert kpr["n"] == 1
     assert kpr["average_support_rate"] == pytest.approx(EXPECTED_SUPPORT_RATE)
     assert kpr["per_query"][query_id]["n_key_points"] > 0
