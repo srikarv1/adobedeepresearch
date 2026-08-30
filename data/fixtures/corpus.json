@@ -1,0 +1,50 @@
+{
+  "why is there a chip shortage": [
+    {
+      "url": "https://example.com/chip-shortage-causes",
+      "title": "Causes of the semiconductor shortage",
+      "snippet": "The 2020–2023 chip shortage was driven by pandemic demand shocks, fab capacity constraints, and logistics disruption.",
+      "text": "The global semiconductor shortage that began in 2020 had several overlapping causes. Consumer electronics demand surged during COVID-19 lockdowns while auto OEMs cancelled then reinstated orders. Leading-edge and mature-node fabs were already near capacity. Winter storms in Texas and a fire at a Renesas plant removed supply. Export controls and geopolitical risk further tightened foundry allocation. Recovery required multi-year capex because a new fab takes 3–5 years to come online."
+    },
+    {
+      "url": "https://example.com/auto-chips",
+      "title": "Why automakers were hit hardest",
+      "snippet": "Automakers rely on mature-node MCUs that were deprioritized when consumer electronics paid higher margins.",
+      "text": "Automotive chips are often 28–40nm microcontrollers rather than leading-edge GPUs. During the shortage, foundries allocated scarce capacity to higher-margin consumer devices. Just-in-time inventory left OEMs with days of stock, so a few weeks of cancelled wafer starts cascaded into factory shutdowns. The industry later dual-sourced MCUs and signed long-term capacity reservations."
+    },
+    {
+      "url": "https://example.com/tsmc-capacity",
+      "title": "Foundry capacity and TSMC expansion",
+      "snippet": "TSMC, Samsung, and Intel announced large expansions, but new capacity lags demand by years.",
+      "text": "TSMC accounts for a large share of leading-edge logic. Announced fabs in Arizona, Japan, and Germany expand geographic diversity but do not immediately relieve mature-node auto supply. Governments launched CHIPS-style subsidies. Analysts estimate that balanced supply-demand for automotive MCUs returned gradually after 2023 as demand normalized and inventory was rebuilt."
+    }
+  ],
+  "is the covid vaccine dangerous": [
+    {
+      "url": "https://example.com/cdc-vaccine-safety",
+      "title": "CDC COVID-19 vaccine safety overview",
+      "snippet": "Authorized mRNA vaccines have a strong safety record from trials and large-scale post-market surveillance.",
+      "text": "FDA-authorized Pfizer and Moderna mRNA vaccines were tested in tens of thousands of participants. The most common side effects are local pain, fatigue, and fever. Rare myocarditis has been observed, mostly in young males after dose two, and is typically mild. Benefit-risk assessments from CDC and WHO conclude that vaccination substantially reduces severe COVID-19 and death."
+    },
+    {
+      "url": "https://example.com/who-vaccine-faq",
+      "title": "WHO vaccine safety FAQ",
+      "snippet": "Serious adverse events are rare; monitoring systems such as VAERS and VSD are used to detect signals.",
+      "text": "Global safety monitoring has not found evidence that authorized COVID-19 vaccines alter DNA or cause infertility. Anaphylaxis is rare and managed in vaccination settings. Updated formulations track circulating variants. Public-health agencies continue to recommend vaccination for high-risk groups including older adults and immunocompromised people."
+    }
+  ],
+  "From 2020 to 2050, how many elderly people will there be in Japan?": [
+    {
+      "url": "https://example.com/japan-aging-ipss",
+      "title": "IPSS population projections for Japan",
+      "snippet": "Japan's 65+ population is projected to stay near 35–40% of the total through 2050 as the overall population shrinks.",
+      "text": "The National Institute of Population and Social Security Research projects that people aged 65+ will remain a very large share of Japan's population from 2020 to 2050. Absolute counts stay high even as total population falls. This implies sustained demand for healthcare, housing adaptations, and age-friendly retail, with consumption shifting from durables toward services and health."
+    },
+    {
+      "url": "https://example.com/japan-silver-market",
+      "title": "Silver-market consumption in Japan",
+      "snippet": "Elderly households hold substantial financial assets and spend on health, food, and housing modifications.",
+      "text": "Japanese older households have high homeownership and financial-asset holdings. Consumption potential is strongest in healthcare, prepared food, compact urban housing, and mobility services. Willingness to spend is tempered by longevity risk and bequest motives, so market-size estimates should separate need from realized expenditure."
+    }
+  ]
+}
