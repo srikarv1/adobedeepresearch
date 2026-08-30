@@ -1,31 +1,46 @@
-"""DeepResearchGym evaluation via the upstream judge scripts.
+"""DeepResearchGym evaluation via the upstream judge functions.
 
-We shell out to the real ``eval_quality_async.py`` / ``eval_kpr_async.py`` /
-``eval_citation_async.py`` rather than reimplementing their prompts. The rubrics
-carry hard scoring rules (for example, Support is zero when a report has no
-source URLs) and dropping them inflates scores and makes results incomparable to
-published numbers.
+We dynamically import ``evaluate_folder_async`` from the upstream scripts
+and call them directly, bypassing the ``__main__`` blocks which hardcode
+cluster paths and accept different CLI flags than this harness needs.
 """
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
+import json
 import os
 from pathlib import Path
 from typing import Any
 
 from adr.core.types import Trajectory
 from adr.eval.exporters import export_deep_research_gym
-from adr.eval.procs import run_script, stage_relative_dir
 from adr.eval.repos import find_deep_research_gym, find_key_points
 from adr.eval.scoring import (
     aggregate_gym_citation,
     aggregate_gym_kpr,
     aggregate_gym_quality,
-    load_json,
 )
 
-# Path eval_kpr_async.py expects key points at, relative to its working directory.
-KPR_KEY_POINT_RELPATH = "deepresearch_benchmarking/key_point"
+
+def _import_gym_module(gym_root: Path, name: str) -> Any:
+    """Dynamically import a module from the Gym checkout by file path."""
+    script = gym_root / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, str(script))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load {script}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _run_async(coro: Any, timeout_s: float | None = None) -> Any:
+    if timeout_s is not None:
+        async def _with_timeout() -> Any:
+            return await asyncio.wait_for(coro, timeout=timeout_s)
+        return asyncio.run(_with_timeout())
+    return asyncio.run(coro)
 
 
 def run_deep_research_gym(
@@ -74,7 +89,7 @@ def run_deep_research_gym(
         result["quality"] = _quality(gym_root, export_dir, out_dir, judge_model, timeout_s)
     if run_kpr:
         result["kpr"] = _kpr(
-            gym_root, export_dir, out_dir, judge_model, key_point_dir, run_dir, timeout_s
+            gym_root, export_dir, out_dir, judge_model, key_point_dir, timeout_s
         )
     if run_citation:
         result["citation"] = _citation(gym_root, export_dir, out_dir, judge_model, timeout_s)
@@ -97,22 +112,18 @@ def _quality(
     judge_model: str,
     timeout_s: float | None,
 ) -> dict[str, Any]:
-    log = run_script(
-        [
-            gym_root / "eval_quality_async.py",
-            "--dir",
-            export_dir.resolve(),
-            "--output",
-            out_dir.resolve(),
-            "--open_ai_model",
-            judge_model,
-        ],
-        cwd=gym_root,
-        timeout_s=timeout_s,
-    )
+    try:
+        mod = _import_gym_module(gym_root, "eval_quality_async")
+        results = _run_async(
+            mod.evaluate_folder_async(export_dir.name, judge_model, str(export_dir.parent)),
+            timeout_s=timeout_s,
+        )
+    except Exception as e:
+        return {"n": 0, "error": str(e)}
+
     path = out_dir / f"quality_{judge_model}.json"
-    scores = aggregate_gym_quality(load_json(path))
-    return {**scores, "path": str(path), "log": log}
+    path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {**aggregate_gym_quality(results), "path": str(path)}
 
 
 def _kpr(
@@ -121,7 +132,6 @@ def _kpr(
     out_dir: Path,
     judge_model: str,
     key_point_dir: str | Path | None,
-    run_dir: Path,
     timeout_s: float | None,
 ) -> dict[str, Any]:
     key_points = find_key_points(gym_root, key_point_dir)
@@ -135,28 +145,20 @@ def _kpr(
             ),
         }
 
-    # eval_kpr_async.py hardcodes a working-directory-relative key point path,
-    # so give it a working directory where that path resolves.
-    staging = run_dir / ".gym_kpr_cwd"
-    staging.mkdir(parents=True, exist_ok=True)
-    stage_relative_dir(staging, KPR_KEY_POINT_RELPATH, key_points)
+    try:
+        mod = _import_gym_module(gym_root, "eval_kpr_async")
+        results = _run_async(
+            mod.evaluate_folder_async(
+                export_dir.name, judge_model, str(export_dir.parent), str(key_points)
+            ),
+            timeout_s=timeout_s,
+        )
+    except Exception as e:
+        return {"n": 0, "error": str(e)}
 
-    log = run_script(
-        [
-            gym_root / "eval_kpr_async.py",
-            "--dir",
-            export_dir.resolve(),
-            "--output",
-            out_dir.resolve(),
-            "--open_ai_model",
-            judge_model,
-        ],
-        cwd=staging,
-        timeout_s=timeout_s,
-    )
     path = out_dir / f"relevance_{judge_model}.json"
-    scores = aggregate_gym_kpr(load_json(path))
-    return {**scores, "key_point_dir": str(key_points), "path": str(path), "log": log}
+    path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {**aggregate_gym_kpr(results), "key_point_dir": str(key_points), "path": str(path)}
 
 
 def _citation(
@@ -166,19 +168,15 @@ def _citation(
     judge_model: str,
     timeout_s: float | None,
 ) -> dict[str, Any]:
-    log = run_script(
-        [
-            gym_root / "eval_citation_async.py",
-            "--dir",
-            export_dir,
-            "--output",
-            out_dir,
-            "--open_ai_model",
-            judge_model,
-        ],
-        cwd=gym_root,
-        timeout_s=timeout_s,
-    )
+    try:
+        mod = _import_gym_module(gym_root, "eval_citation_async")
+        results = _run_async(
+            mod.evaluate_folder_async(export_dir.name, judge_model, str(export_dir.parent)),
+            timeout_s=timeout_s,
+        )
+    except Exception as e:
+        return {"n": 0, "error": str(e)}
+
     path = out_dir / f"faithfullness_{judge_model}.json"
-    scores = aggregate_gym_citation(load_json(path))
-    return {**scores, "path": str(path), "log": log}
+    path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {**aggregate_gym_citation(results), "path": str(path)}
