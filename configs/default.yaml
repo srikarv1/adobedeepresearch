@@ -1,0 +1,46 @@
+run_name: local-smoke
+output_dir: runs
+seed: 17
+concurrency: 4
+
+dataset:
+  name: deep_research_gym
+  language: en
+  limit: 2
+  query_ids: []
+
+# Swap this to `deep_research` or `pilot` after you implement those agents.
+agent:
+  name: fixture
+  config: configs/agents/fixture.yaml
+
+# provider: mock | openai_compat
+# openai_compat talks to any OpenAI-style server (OpenAI, OpenRouter, vLLM, Ollama).
+llm:
+  provider: mock
+  model: gpt-4.1-mini
+  base_url: null
+  api_key_env: OPENAI_API_KEY
+  temperature: 0.0
+  max_output_tokens: 2048
+
+# backend: mock | gym | tavily
+# corpus selects the Gym route: fineweb -> /fineweb/search, clueweb22 -> /search
+search:
+  backend: mock
+  top_k: 5
+  corpus: fineweb
+
+budget:
+  max_steps: 12
+  max_searches: 6
+  max_reads: 8
+  max_tokens: 24000
+  max_latency_s: 180.0
+  max_evidence: 24
+  # true raises BudgetExceeded on the call that would overrun; false records the
+  # overrun in metrics and lets the trajectory finish.
+  enforce: false
+
+eval:
+  official_benches: []

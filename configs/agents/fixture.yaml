@@ -1,0 +1,4 @@
+# Harness smoke-test agent. Not a research architecture.
+name: fixture
+search_query: null
+max_passages: 4
