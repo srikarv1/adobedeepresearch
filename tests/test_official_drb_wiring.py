@@ -1,4 +1,4 @@
-"""Checks the DeepResearch Bench pipeline without calling Gemini.
+"""Checks the DeepResearch Bench pipeline without calling the LLM backend.
 
 A stub stands in for ``deepresearch_bench_race.py``. It records the arguments it
 was handed and writes a ``race_result.txt`` in the upstream format, which lets us
@@ -16,7 +16,7 @@ from adr.eval.deep_research_bench import run_deep_research_bench
 from adr.eval.importers import trajectory_from_pair
 from adr.eval.scoring import headline_scores
 
-RACE_STUB = '''
+RACE_STUB = """
 import argparse, json, os, sys
 from pathlib import Path
 
@@ -42,7 +42,7 @@ Path(args.raw_data_dir, "_stub_call.json").write_text(json.dumps({
     "output_dir": args.output_dir,
     "only_en": args.only_en,
     "only_zh": args.only_zh,
-    "gemini_key_seen": bool(os.environ.get("GEMINI_API_KEY")),
+    "judge_key_seen": bool(os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")),
     "target_rows": sum(
         1 for _ in open(Path(args.raw_data_dir, args.target_model + ".jsonl"), encoding="utf-8")
     ),
@@ -54,7 +54,7 @@ Path(args.raw_data_dir, "_stub_call.json").write_text(json.dumps({
     "Readability: 0.5010\\n"
     "Overall Score: 0.5102\\n"
 )
-'''
+"""
 
 
 @pytest.fixture
@@ -80,7 +80,7 @@ def _traj():
 
 
 def test_race_invocation_and_score_parseback(fake_bench: Path, tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "mock-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "mock-key")
     monkeypatch.delenv("JINA_API_KEY", raising=False)
 
     result = run_deep_research_bench(
@@ -95,11 +95,13 @@ def test_race_invocation_and_score_parseback(fake_bench: Path, tmp_path: Path, m
     assert result["official"] is True, result
     assert result["race"]["log"]["ok"], result["race"]["log"]
 
-    call = json.loads((fake_bench / "data" / "test_data" / "raw_data" / "_stub_call.json").read_text())
+    call = json.loads(
+        (fake_bench / "data" / "test_data" / "raw_data" / "_stub_call.json").read_text()
+    )
     assert call["target_model"] == "pilot"
     assert call["only_en"] is True and call["only_zh"] is False
     assert call["max_workers"] == 3
-    assert call["gemini_key_seen"] is True
+    assert call["judge_key_seen"] is True
     assert call["target_rows"] == 1
     assert call["query_file"].endswith("data/prompt_data/query.jsonl")
 
