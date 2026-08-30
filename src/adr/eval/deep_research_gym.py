@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,10 @@ from adr.eval.scoring import (
 
 def _import_gym_module(gym_root: Path, name: str) -> Any:
     """Dynamically import a module from the Gym checkout by file path."""
+    gym_root = Path(gym_root).resolve()
+    root_str = str(gym_root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
     script = gym_root / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, str(script))
     if spec is None or spec.loader is None:
@@ -33,6 +39,35 @@ def _import_gym_module(gym_root: Path, name: str) -> Any:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def evaluate_folder_call_args(
+    fn: Any,
+    export_dir: Path,
+    judge_model: str,
+    key_point_dir: str | Path | None = None,
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    """Build args for both Gym ``evaluate_folder_async`` signatures.
+
+    Older checkouts take ``(subfolder, model, parent_dir[, key_point_dir])``.
+    Current Flitternie / local checkouts take
+    ``(path_to_reports, model[, key_point_dir])``.
+    """
+    params = list(inspect.signature(fn).parameters)
+    names = set(params)
+    if params and params[0] == "path_to_reports":
+        args: list[Any] = [str(export_dir), judge_model]
+        kwargs: dict[str, Any] = {}
+        if key_point_dir is not None and "key_point_dir" in names:
+            kwargs["key_point_dir"] = str(key_point_dir)
+        elif key_point_dir is not None and len(params) >= 3 and params[2] != "num_workers":
+            args.append(str(key_point_dir))
+        return tuple(args), kwargs
+
+    args = [export_dir.name, judge_model, str(export_dir.parent)]
+    if key_point_dir is not None:
+        args.append(str(key_point_dir))
+    return tuple(args), {}
 
 
 def _run_async(coro: Any, timeout_s: float | None = None) -> Any:
@@ -114,8 +149,11 @@ def _quality(
 ) -> dict[str, Any]:
     try:
         mod = _import_gym_module(gym_root, "eval_quality_async")
+        args, kwargs = evaluate_folder_call_args(
+            mod.evaluate_folder_async, export_dir, judge_model
+        )
         results = _run_async(
-            mod.evaluate_folder_async(export_dir.name, judge_model, str(export_dir.parent)),
+            mod.evaluate_folder_async(*args, **kwargs),
             timeout_s=timeout_s,
         )
     except Exception as e:
@@ -147,10 +185,11 @@ def _kpr(
 
     try:
         mod = _import_gym_module(gym_root, "eval_kpr_async")
+        args, kwargs = evaluate_folder_call_args(
+            mod.evaluate_folder_async, export_dir, judge_model, key_points
+        )
         results = _run_async(
-            mod.evaluate_folder_async(
-                export_dir.name, judge_model, str(export_dir.parent), str(key_points)
-            ),
+            mod.evaluate_folder_async(*args, **kwargs),
             timeout_s=timeout_s,
         )
     except Exception as e:
@@ -170,8 +209,11 @@ def _citation(
 ) -> dict[str, Any]:
     try:
         mod = _import_gym_module(gym_root, "eval_citation_async")
+        args, kwargs = evaluate_folder_call_args(
+            mod.evaluate_folder_async, export_dir, judge_model
+        )
         results = _run_async(
-            mod.evaluate_folder_async(export_dir.name, judge_model, str(export_dir.parent)),
+            mod.evaluate_folder_async(*args, **kwargs),
             timeout_s=timeout_s,
         )
     except Exception as e:
