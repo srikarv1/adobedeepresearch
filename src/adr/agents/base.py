@@ -19,11 +19,10 @@ class AgentContext:
 
 @runtime_checkable
 class ResearchAgent(Protocol):
-    """Anything that turns a query + tools into a report trajectory.
+    """Turns a query + injected tools into a report trajectory.
 
-    Implement `run` in `deep_research.py` or `pilot.py` and register the class
-    in `registry.py`. The rest of the eval stack does not care which model you
-    use; it only needs a `Trajectory` with `report.article` set.
+    Real researchers use ``InternAgent`` and swap the orchestrator. Register a
+    new name in ``registry.py``. The eval stack only needs ``report.article``.
     """
 
     name: str

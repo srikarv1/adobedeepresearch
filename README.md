@@ -1,8 +1,18 @@
 # Adobe Deep Research harness
 
-An evaluation harness for testing deep research agent architectures on **DeepResearch Bench** (RACE + FACT) and **DeepResearchGym** (quality, key-point recall, citation faithfulness).
+Evaluation harness for deep-research agents on **DeepResearch Bench** (RACE + FACT) and **DeepResearchGym** (quality, key-point recall, citation faithfulness).
 
-The harness owns everything except the agent: query loading, budgeted execution, cost measurement, export in each benchmark's official format, invocation of the official judges, and run-to-run comparison. Agent implementations are deliberately left as stubs.
+```
+query  ->  intern (plan / search / write)  ->  report
+                 ^
+                 |
+           orchestrator.decide()
+           keep mask, branch weights, stop
+```
+
+The intern is frozen and sequential. The orchestrator is the knob: **fixed** (top-k keep), **prompted** (thin LLM scorecard), or **learned** (stub). ParallelResearch's async tree is the published Adobe baseline, not this intern.
+
+The harness owns query loading, budgets, cost meters, official export formats, and official judges. Agents must use `ctx.llm` and `ctx.search` so tokens and latency are measured, not self-reported.
 
 ## Design commitments
 
@@ -63,9 +73,32 @@ To check the wiring without a judge key, run `pytest tests/test_official_gym_wir
 
 ```bash
 adr run --config configs/default.yaml --limit 2          # fixture agent, mock LLM, mock corpus
-adr run --config configs/intern_gym.yaml --limit 1
-adr run --config configs/prompted_gym.yaml --limit 1     # Azure gpt-5.6-sol
+adr run --config configs/intern_gym.yaml --limit 1       # intern + fixed orchestrator
+adr run --config configs/prompted_gym.yaml --limit 1     # intern + prompted orchestrator (Azure)
 python scripts/sweep_fixed.py                             # B/D quality-vs-cost table
+```
+
+### Where the report is
+
+Each run writes a folder under `runs/` (gitignored). The article is the `.md` file:
+
+```
+runs/<timestamp>-<name>/
+  reports/<query_id>.md                 <-- human-readable report
+  exports/deep_research_gym/<agent>/<id>.a   <-- Gym judge input
+  trajectories/<query_id>.json          <-- full step log
+  trajectories/decisions.jsonl          <-- orchestrator (u, m, w) + features
+  metrics/summary.json                  <-- tokens, searches, scores
+```
+
+Live Azure example (Gym query 923549, chip shortage):
+
+`runs/20260901-205354-azure-intern/reports/923549.md`
+
+Score that file without re-running the intern:
+
+```bash
+adr score --report runs/20260901-205354-azure-intern/reports/923549.md --query-id 923549
 ```
 
 Then compare a baseline against a candidate. Quality, cost, and structure are reported separately, because "fewer tokens" and "higher score" should never be averaged into one number:
@@ -76,9 +109,15 @@ adr compare runs/<baseline> runs/<candidate>
 
 ## Implement an agent
 
-`deep_research` is the GPTR-shaped intern plus FixedOrchestrator.
-`pilot` adds a prompted keep/allocate/terminate call after each retrieve.
-`learned` is the same intern with a policy stub. The contract is one method:
+There is one intern (`InternAgent` in `src/adr/agents/intern.py`). After each retrieve it calls `decide(state) -> PilotDecision(u, m, w)`: stop, keep-mask, branch weights. Register a name only to pick the orchestrator:
+
+| `adr run` agent | Orchestrator | Meaning |
+|---|---|---|
+| `deep_research` | fixed | constant breadth, top-k keep |
+| `pilot` | prompted | LLM keep / allocate / stop |
+| `learned` | learned | policy stub; train later |
+
+The contract is one method:
 
 ```python
 async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
@@ -95,26 +134,11 @@ Budgets are charged as you spend. With `budget.enforce: true` the overrunning ca
 
 ```
 src/adr/
-  agents/         fixture | deep_research (fixed) | pilot (prompted) | learned (stub)
-  orchestrate/    Fixed / Prompted / Learned decide(state) -> Action
-  features/       8-d evidence vectors + cached encoder
-  core/
-    state.py      evidence pool, frontier, budget, compact_stats()
-    instrument.py MeteredLLM / MeteredSearch / CostMeter
-  llm/            mock | openai_compat
-  tools/          mock | gym (ClueWeb22 + FineWeb) | tavily
-  datasets/       official query loaders
-  eval/
-    exporters.py  official file formats
-    importers.py  arbitrary reports -> Trajectory
-    repos.py      locating the judge checkouts
-    scoring.py    upstream aggregation formulas + result parsers
-    deep_research_bench.py / deep_research_gym.py
-    compare.py    quality vs cost vs structure
-  runner/         experiment driver
-configs/          default + per-agent + per-bench
-data/benchmarks/  official query files, byte-identical to upstream
-third_party/      judge checkouts (gitignored)
+  agents/intern.py   plan / search / write  (one intern)
+  orchestrate/       decide(state) -> keep, weights, stop
+  runner/            writes runs/<id>/reports/<query>.md
+  core/instrument.py MeteredLLM / MeteredSearch
+  eval/              official Gym + Bench judges (never rewritten)
 ```
 
 ## Metrics

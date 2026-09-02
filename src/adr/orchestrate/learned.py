@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from adr.core.state import ResearchState
-from adr.core.types import ActionType, OrchestratorAction
+from adr.core.types import PilotDecision
 
 
 class LearnedOrchestrator:
@@ -20,11 +20,10 @@ class LearnedOrchestrator:
                 "Train later; until then use FixedOrchestrator or PromptedOrchestrator."
             )
 
-    async def decide(self, state: ResearchState, ctx=None) -> OrchestratorAction:
-        # No weights yet: keep everything, continue. Load a policy file later.
-        return OrchestratorAction(
-            type=ActionType.PRUNE,
-            evidence_ids=[ev.id for ev in state.retained()],
-            terminate=False,
+    async def decide(self, state: ResearchState, ctx=None) -> PilotDecision:
+        return PilotDecision(
+            u=False,
+            m=[ev.id for ev in state.retained()],
+            w={},
             rationale="learned stub: identity keep-mask until a policy is loaded",
         )

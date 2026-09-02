@@ -78,6 +78,7 @@ def test_intern_run_writes_decision_log(tmp_path: Path):
     first = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
     assert first["kind"] == "decision"
     assert "features" in first
+    assert {"u", "m", "w"} <= set(first)
 
 
 def test_research_agents_are_registered():

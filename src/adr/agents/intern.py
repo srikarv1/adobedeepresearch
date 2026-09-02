@@ -1,8 +1,16 @@
-"""GPTR-shaped intern: plan, search, synthesize. Orchestrator is injected.
+"""One frozen intern. The orchestrator is the only thing that changes.
 
-Inspired by gpt-researcher's planner / crawler / publisher loop. Every tool
-call goes through ``ctx.llm`` and ``ctx.search`` so meters stay honest.
-The intern does not prune; ``Orchestrator.decide`` does that after retrieve.
+    query
+      -> plan subquestions
+      -> search / read one branch
+      -> orchestrator.decide(state) -> (u, m, w) stop / keep-mask / weights
+      -> write report from retained evidence
+
+Every LLM and search call goes through ``ctx.llm`` / ``ctx.search`` so the
+harness meters tokens and latency. The intern never prunes; ``decide`` does.
+
+This is a sequential researcher, not ParallelResearch's async tree. Reports
+land at ``runs/<run_id>/reports/<query_id>.md``.
 """
 
 from __future__ import annotations
@@ -14,6 +22,7 @@ from adr.core.state import ResearchState
 from adr.core.types import (
     ActionType,
     OrchestratorAction,
+    PilotDecision,
     Report,
     ResearchTask,
     TokenUsage,
@@ -22,8 +31,15 @@ from adr.core.types import (
 from adr.features.extract import pool_features
 from adr.llm.base import LLMResponse
 from adr.logging.jsonl import append_jsonl
-from adr.orchestrate.apply import apply_action
+from adr.orchestrate import build_orchestrator
+from adr.orchestrate.apply import apply_decision
 from adr.orchestrate.base import Orchestrator
+
+_DEFAULT_ORCHESTRATOR = {
+    "deep_research": "fixed",
+    "pilot": "prompted",
+    "learned": "learned",
+}
 
 _LINE = re.compile(r"^\s*(?:[-*]|\d+[.)])?\s*(.+?)\s*$")
 
@@ -182,7 +198,7 @@ async def execute_branch(
 def _log_decision(
     ctx: AgentContext,
     state: ResearchState,
-    action: OrchestratorAction,
+    decision: PilotDecision,
     dropped: list[str],
     orch_name: str,
 ) -> None:
@@ -196,10 +212,9 @@ def _log_decision(
             "kind": "decision",
             "query_id": state.query.id,
             "orchestrator": orch_name,
-            "action": action.type.value,
-            "keep_ids": action.evidence_ids,
-            "weights": action.weights,
-            "terminate": action.terminate,
+            "u": decision.u,
+            "m": decision.m,
+            "w": decision.w,
             "dropped": dropped,
             "features": features,
             "budget": {
@@ -208,7 +223,7 @@ def _log_decision(
                 "remaining_latency_s": state.budget.remaining_latency_s(),
                 "used_tokens": state.budget.used_tokens,
             },
-            "rationale": action.rationale[:400],
+            "rationale": decision.rationale[:400],
         },
     )
 
@@ -222,7 +237,7 @@ async def run_intern(
     reads_per_round: int = 1,
     orchestrator: Orchestrator | None = None,
 ) -> Trajectory:
-    """Algorithm 1. ``orchestrator`` is PILOT (fixed / prompted / learned)."""
+    """Plan → retrieve → decide → write. ``orchestrator`` is fixed / prompted / learned."""
     state = ResearchState(task.query, task.budget)
     try:
         goals, usage = await decompose(ctx, task.query.text, max_n=max_subquestions)
@@ -240,23 +255,17 @@ async def run_intern(
         while not state.should_stop():
             await execute_branch(ctx, state, top_k=top_k, reads_per_round=reads_per_round)
             if orchestrator is not None:
-                action = await orchestrator.decide(state, ctx)
-                dropped = apply_action(state, action)
-                _log_decision(ctx, state, action, dropped, orchestrator.name)
+                decision = await orchestrator.decide(state, ctx)
+                dropped = apply_decision(state, decision)
+                _log_decision(ctx, state, decision, dropped, orchestrator.name)
                 state.record_step(
-                    OrchestratorAction(
-                        type=action.type,
-                        evidence_ids=action.evidence_ids,
-                        weights=action.weights,
-                        terminate=action.terminate,
-                        rationale=action.rationale,
-                    ),
+                    decision.to_step(),
                     observation=(
-                        f"orch={orchestrator.name} keep={len(action.evidence_ids)} "
-                        f"dropped={len(dropped)} terminate={action.terminate}"
+                        f"orch={orchestrator.name} u={int(decision.u)} "
+                        f"|m|={len(decision.m)} |w|={len(decision.w)} dropped={len(dropped)}"
                     ),
                 )
-                if action.terminate or action.type is ActionType.TERMINATE:
+                if decision.u:
                     break
             if not state.open_subtasks() and state.retained():
                 break
@@ -292,3 +301,35 @@ async def run_intern(
         state.terminated = True
         state.termination_reason = str(exc)
     return state.trajectory()
+
+
+class InternAgent:
+    """Registered names only pick which orchestrator is injected."""
+
+    def __init__(self, config: dict | None = None, *, name: str = "deep_research") -> None:
+        self.config = dict(config or {})
+        self.name = name
+        orch = str(self.config.get("orchestrator") or _DEFAULT_ORCHESTRATOR.get(name, "fixed"))
+        self.orchestrator = build_orchestrator(orch, self.config)
+
+    async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
+        return await run_intern(
+            task,
+            ctx,
+            max_subquestions=int(self.config.get("max_subquestions", 4)),
+            top_k=int(self.config.get("top_k", 5)),
+            reads_per_round=int(self.config.get("reads_per_round", 1)),
+            orchestrator=self.orchestrator,
+        )
+
+
+def intern_builder(name: str):
+    def build(config: dict | None = None) -> InternAgent:
+        return InternAgent(config, name=name)
+
+    return build
+
+
+build_deep_research = intern_builder("deep_research")
+build_pilot = intern_builder("pilot")
+build_learned = intern_builder("learned")

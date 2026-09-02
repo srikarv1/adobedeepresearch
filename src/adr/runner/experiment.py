@@ -233,6 +233,7 @@ def _write_query_artifacts(run_dir: Path, traj: Trajectory) -> None:
         traj.model_dump_json(indent=2) + "\n", encoding="utf-8"
     )
     if traj.report:
+        # Human-readable article. Gym/Bench judges read the export copies, not this file.
         (run_dir / "reports" / f"{traj.query.id}.md").write_text(traj.report.article, encoding="utf-8")
 
 
