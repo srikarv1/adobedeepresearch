@@ -1,19 +1,19 @@
-"""Intern + PromptedOrchestrator (FlashResearch-thin baseline to beat)."""
+"""Intern + LearnedOrchestrator stub. Policy load happens later."""
 
 from __future__ import annotations
 
 from adr.agents.base import AgentContext, ResearchAgent
 from adr.agents.intern import run_intern
 from adr.core.types import ResearchTask, Trajectory
-from adr.orchestrate import PromptedOrchestrator
+from adr.orchestrate import LearnedOrchestrator
 
 
-class PilotAgent:
-    name = "pilot"
+class LearnedAgent:
+    name = "learned"
 
     def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
-        self.orchestrator = PromptedOrchestrator(self.config)
+        self.orchestrator = LearnedOrchestrator(self.config)
 
     async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
         return await run_intern(
@@ -27,4 +27,4 @@ class PilotAgent:
 
 
 def build(config: dict | None = None) -> ResearchAgent:
-    return PilotAgent(config)
+    return LearnedAgent(config)

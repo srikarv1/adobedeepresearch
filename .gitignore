@@ -21,6 +21,7 @@ keys.env
 # Run output
 runs/
 artifacts/
+.cache/
 
 # Judge checkouts. bootstrap_third_party.sh may place a symlink here, which a
 # directory-only pattern would not match, so ignore the whole directory.

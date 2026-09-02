@@ -104,6 +104,7 @@ def test_export_layout_matches_official_expectations(tmp_path: Path, monkeypatch
         dataset="deep_research_gym",
     )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
     result = run_deep_research_gym([traj], run_dir=tmp_path, model_name="layout")
 
     export = Path(result["export"])

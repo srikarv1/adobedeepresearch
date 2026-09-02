@@ -5,6 +5,7 @@ import yaml
 import json
 
 from adr.agents.deep_research import DeepResearchAgent
+from adr.agents.learned import LearnedAgent
 from adr.agents.pilot import PilotAgent
 from adr.eval.compare import compare_summaries
 from adr.runner.config import load_config
@@ -58,9 +59,31 @@ def test_drb_export_from_fixture(tmp_path: Path):
     assert row["article"]
 
 
-def test_unimplemented_agents_are_registered_but_empty():
+def test_intern_run_writes_decision_log(tmp_path: Path):
+    cfg = load_config(
+        "configs/intern_gym.yaml",
+        {
+            "output_dir": str(tmp_path),
+            "run_name": "intern",
+            "concurrency": 1,
+            "dataset": {"name": "deep_research_gym", "query_ids": ["923549"], "limit": 1},
+            "llm": {"provider": "mock"},
+            "search": {"backend": "mock"},
+        },
+    )
+    manifest = run_experiment(cfg)
+    assert (manifest.run_dir / "reports" / "923549.md").exists()
+    log = manifest.run_dir / "trajectories" / "decisions.jsonl"
+    assert log.exists()
+    first = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
+    assert first["kind"] == "decision"
+    assert "features" in first
+
+
+def test_research_agents_are_registered():
     assert DeepResearchAgent().name == "deep_research"
     assert PilotAgent().name == "pilot"
+    assert LearnedAgent().name == "learned"
 
 
 def test_compare_two_summaries(tmp_path: Path):

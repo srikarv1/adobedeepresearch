@@ -1,0 +1,41 @@
+# GPTR-shaped intern + FixedOrchestrator on Gym. Mock search by default.
+run_name: intern-gym
+output_dir: runs
+seed: 17
+concurrency: 1
+
+dataset:
+  name: deep_research_gym
+  language: en
+  limit: 1
+  query_ids:
+    - "923549"
+
+agent:
+  name: deep_research
+  config: configs/agents/deep_research.yaml
+
+llm:
+  provider: mock
+  model: gpt-5.6-sol
+  api_key_env: AZURE_OPENAI_API_KEY
+  temperature: 0.0
+  max_output_tokens: 2048
+
+search:
+  backend: mock
+  top_k: 5
+  corpus: fineweb
+  cache: true
+
+budget:
+  max_steps: 12
+  max_searches: 6
+  max_reads: 8
+  max_tokens: 24000
+  max_latency_s: 180.0
+  max_evidence: 24
+  enforce: false
+
+eval:
+  official_benches: []

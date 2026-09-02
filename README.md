@@ -63,8 +63,9 @@ To check the wiring without a judge key, run `pytest tests/test_official_gym_wir
 
 ```bash
 adr run --config configs/default.yaml --limit 2          # fixture agent, mock LLM, mock corpus
-adr run --agent pilot --dataset deep_research_gym --limit 20 \
-  --llm openai_compat --search gym --official deep_research_gym
+adr run --config configs/intern_gym.yaml --limit 1
+adr run --config configs/prompted_gym.yaml --limit 1     # Azure gpt-5.6-sol
+python scripts/sweep_fixed.py                             # B/D quality-vs-cost table
 ```
 
 Then compare a baseline against a candidate. Quality, cost, and structure are reported separately, because "fewer tokens" and "higher score" should never be averaged into one number:
@@ -75,7 +76,9 @@ adr compare runs/<baseline> runs/<candidate>
 
 ## Implement an agent
 
-Fill in `src/adr/agents/deep_research.py` or `pilot.py`. The contract is one method:
+`deep_research` is the GPTR-shaped intern plus FixedOrchestrator.
+`pilot` adds a prompted keep/allocate/terminate call after each retrieve.
+`learned` is the same intern with a policy stub. The contract is one method:
 
 ```python
 async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
@@ -92,7 +95,9 @@ Budgets are charged as you spend. With `budget.enforce: true` the overrunning ca
 
 ```
 src/adr/
-  agents/         implement your agent here (deep_research.py, pilot.py are stubs)
+  agents/         fixture | deep_research (fixed) | pilot (prompted) | learned (stub)
+  orchestrate/    Fixed / Prompted / Learned decide(state) -> Action
+  features/       8-d evidence vectors + cached encoder
   core/
     state.py      evidence pool, frontier, budget, compact_stats()
     instrument.py MeteredLLM / MeteredSearch / CostMeter

@@ -6,8 +6,9 @@ third_party_dir: null
 key_point_dir: null
 query_file: data/benchmarks/deep_research_gym/researchy_queries_sample_doc_click.jsonl
 
-# Judge model. Needs OPENAI_API_KEY; set OPENAI_BASE_URL for a compatible server.
-judge_model: gpt-4.1-mini
+# Judge model. On Azure this must be the *deployment* name. Leave empty to use
+# AZURE_OPENAI_DEPLOYMENT, then gpt-4.1-mini.
+judge_model: null
 
 run_quality: true
 run_kpr: true

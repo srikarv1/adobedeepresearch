@@ -85,6 +85,6 @@ def test_hits_respect_k():
 
 def test_build_search_dispatch():
     assert isinstance(build_search({"backend": "mock"}), MockSearch)
-    assert isinstance(build_search({"backend": "gym"}), GymSearch)
+    assert isinstance(build_search({"backend": "gym", "cache": False}), GymSearch)
     with pytest.raises(ValueError, match="Unknown search backend"):
         build_search({"backend": "nope"})

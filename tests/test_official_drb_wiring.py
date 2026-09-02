@@ -120,6 +120,7 @@ def test_race_invocation_and_score_parseback(fake_bench: Path, tmp_path: Path, m
 def test_missing_judge_key_is_reported_not_silent(fake_bench: Path, tmp_path: Path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("LLM_BACKEND", "openai")
     result = run_deep_research_bench(
         [_traj()], run_dir=tmp_path / "run", model_name="pilot", third_party_dir=fake_bench

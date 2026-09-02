@@ -1,0 +1,6 @@
+name: learned
+orchestrator: learned
+max_subquestions: 4
+top_k: 5
+reads_per_round: 1
+# policy_path: runs/policy.pt

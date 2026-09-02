@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import traceback
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from adr.eval.exporters import export_deep_research_bench, export_deep_research_
 from adr.eval.local_metrics import compute_local_metrics, write_local_metrics
 from adr.eval.scoring import headline_scores
 from adr.llm.factory import build_llm
+from adr.logging.jsonl import append_jsonl
 from adr.tools.search import build_search
 
 
@@ -80,7 +82,12 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
             ctx = AgentContext(
                 llm=MeteredLLM(llm, meter, budget=task.budget, enforce=enforce_budget),
                 search=MeteredSearch(search, meter, budget=task.budget, enforce=enforce_budget),
-                extra={"config": config, "meter": meter},
+                extra={
+                    "config": config,
+                    "meter": meter,
+                    "run_dir": run_dir,
+                    "decision_log": run_dir / "trajectories" / "decisions.jsonl",
+                },
             )
             t0 = time.perf_counter()
             try:
@@ -114,6 +121,7 @@ async def run_experiment_async(config: dict[str, Any]) -> RunManifest:
     official: dict[str, Any] = {}
     for bench in config.get("eval", {}).get("official_benches") or []:
         official[bench] = await asyncio.to_thread(_run_official, bench, trajectories, run_dir, model_name, config)
+    _log_episodes(run_dir, trajectories, official, agent_name=model_name)
 
     summary = {
         "run_id": run_id,
@@ -152,6 +160,7 @@ def evaluate_run_dir(run_dir: Path, *, official_benches: list[str], config: dict
         "official": official,
     }
     (run_dir / "metrics" / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    _log_episodes(run_dir, trajectories, official, agent_name=model_name)
     return summary
 
 
@@ -184,7 +193,11 @@ def _run_official(
             model_name=model_name,
             third_party_dir=eval_cfg.get("third_party_dir"),
             key_point_dir=eval_cfg.get("key_point_dir"),
-            judge_model=eval_cfg.get("judge_model", "gpt-4.1-mini"),
+            judge_model=(
+                eval_cfg.get("judge_model")
+                or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+                or "gpt-4.1-mini"
+            ),
             run_quality=bool(eval_cfg.get("run_quality", True)),
             run_kpr=bool(eval_cfg.get("run_kpr", True)),
             run_citation=bool(eval_cfg.get("run_citation", False)),
@@ -234,6 +247,33 @@ def _run_id(config: dict[str, Any], started: datetime) -> str:
     stamp = started.strftime("%Y%m%d-%H%M%S")
     name = str(config.get("run_name") or "run")
     return f"{stamp}-{name}"
+
+
+def _log_episodes(
+    run_dir: Path,
+    trajectories: list[Trajectory],
+    official: dict[str, Any],
+    *,
+    agent_name: str,
+) -> None:
+    scores = headline_scores(official)
+    path = run_dir / "trajectories" / "episodes.jsonl"
+    for traj in trajectories:
+        usage = (traj.final_stats or {}).get("usage") or {}
+        append_jsonl(
+            path,
+            {
+                "kind": "episode",
+                "query_id": traj.query.id,
+                "agent": agent_name,
+                "n_steps": len(traj.steps),
+                "tokens": usage.get("total_tokens") or traj.total_tokens(),
+                "n_searches": usage.get("n_search_calls"),
+                "error": traj.error,
+                "has_report": bool(traj.report and traj.report.article),
+                "scores": scores,
+            },
+        )
 
 
 def manifest_json(manifest: RunManifest) -> str:

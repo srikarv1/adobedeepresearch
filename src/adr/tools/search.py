@@ -292,16 +292,22 @@ def _extract_hits(payload: Any) -> list[dict]:
 def build_search(cfg: dict) -> SearchBackend:
     backend = str(cfg.get("backend", "mock")).lower()
     if backend == "mock":
-        return MockSearch(path=cfg.get("corpus_path"))
-    if backend in {"gym", "deepresearchgym", "clueweb", "fineweb"}:
+        inner: SearchBackend = MockSearch(path=cfg.get("corpus_path"))
+    elif backend in {"gym", "deepresearchgym", "clueweb", "fineweb"}:
         corpus = cfg.get("corpus") or ("clueweb22" if backend == "clueweb" else "fineweb")
-        return GymSearch(
+        inner = GymSearch(
             base_url=cfg.get("base_url"),
             search_url=cfg.get("search_url"),
             fetch_url=cfg.get("fetch_url"),
             api_key=cfg.get("api_key"),
             corpus=corpus,
         )
-    if backend == "tavily":
-        return TavilySearch(api_key=cfg.get("api_key"))
-    raise ValueError(f"Unknown search backend: {backend}")
+    elif backend == "tavily":
+        inner = TavilySearch(api_key=cfg.get("api_key"))
+    else:
+        raise ValueError(f"Unknown search backend: {backend}")
+    if cfg.get("cache", True) and backend != "mock":
+        from adr.cache.search import CachedSearch
+
+        return CachedSearch(inner)
+    return inner
