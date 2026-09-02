@@ -5,12 +5,13 @@ from pathlib import Path
 import yaml
 
 from adr.agents.base import ResearchAgent
-from adr.agents import deep_research, fixture, pilot
+from adr.agents import deep_research, fixture, learned, pilot
 
 _BUILDERS = {
     "fixture": fixture.build,
     "deep_research": deep_research.build,
     "pilot": pilot.build,
+    "learned": learned.build,
 }
 
 

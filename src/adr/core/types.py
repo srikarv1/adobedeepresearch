@@ -143,6 +143,8 @@ class OrchestratorAction(BaseModel):
     plan: list[str] = Field(default_factory=list)
     rationale: str = ""
     report_draft: str | None = None
+    weights: dict[str, float] = Field(default_factory=dict)
+    terminate: bool = False
 
 
 class StepRecord(BaseModel):

@@ -17,9 +17,17 @@ from adr.eval.importers import (
     trajectory_from_pair,
     write_trajectories,
 )
-from adr.eval.repos import find_deep_research_bench, find_deep_research_gym, find_key_points
+from adr.eval.repos import (
+    find_deep_research_bench,
+    find_deep_research_gym,
+    find_gpt_researcher,
+    find_key_points,
+)
+from adr.env import load_env
 from adr.runner.config import load_config
 from adr.runner.experiment import evaluate_run_dir, run_experiment
+
+load_env()
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
@@ -234,9 +242,20 @@ def doctor_cmd() -> None:
             str(key_points or "needed for key-point recall only"),
         )
 
+    gptr = find_gpt_researcher()
+    table.add_row(
+        "gpt-researcher (intern reference)",
+        "[green]found[/green]" if gptr.ok else "[yellow]missing[/yellow]",
+        str(gptr.path or gptr.reason),
+    )
+
     for name, used_for in (
-        ("OPENAI_API_KEY", "DRB judge (LLM_BACKEND=openai) + all Gym judges"),
-        ("OPENROUTER_API_KEY", "DRB judge (LLM_BACKEND=openrouter, default)"),
+        ("AZURE_OPENAI_API_KEY", "intern + Gym judges (aliased to OPENAI_API_KEY)"),
+        ("AZURE_OPENAI_ENDPOINT", "Azure resource endpoint"),
+        ("AZURE_OPENAI_DEPLOYMENT", "Azure deployment name used as the model id"),
+        ("GEMINI_API_KEY", "DRB RACE + FACT (this checkout's utils/api.py)"),
+        ("OPENAI_API_KEY", "Gym judges (or aliased from Azure)"),
+        ("OPENROUTER_API_KEY", "DRB only if a fork uses LLM_BACKEND=openrouter"),
         ("JINA_API_KEY", "DRB FACT scraping"),
         ("DEEPRESEARCHGYM_API_KEY", "Gym search backend"),
         ("TAVILY_API_KEY", "live web search"),

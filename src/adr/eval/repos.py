@@ -25,9 +25,11 @@ ROOT = Path(__file__).resolve().parents[3]
 
 DRB_MARKERS = ("deepresearch_bench_race.py",)
 GYM_MARKERS = ("eval_quality_async.py", "eval_kpr_async.py")
+GPTR_MARKERS = ("gpt_researcher/__init__.py",)
 
 DRB_NAMES = ("deep_research_bench",)
 GYM_NAMES = ("deepresearchgym", "deepresearch_benchmarking")
+GPTR_NAMES = ("gpt-researcher", "gpt_researcher")
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,10 @@ def find_deep_research_bench(explicit: str | Path | None = None) -> RepoLocation
 
 def find_deep_research_gym(explicit: str | Path | None = None) -> RepoLocation:
     return _resolve(explicit, "ADR_GYM_DIR", GYM_NAMES, GYM_MARKERS, "DeepResearchGym")
+
+
+def find_gpt_researcher(explicit: str | Path | None = None) -> RepoLocation:
+    return _resolve(explicit, "ADR_GPTR_DIR", GPTR_NAMES, GPTR_MARKERS, "gpt-researcher")
 
 
 def find_key_points(gym_root: Path, explicit: str | Path | None = None) -> Path | None:

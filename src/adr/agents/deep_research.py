@@ -1,14 +1,11 @@
-"""Your deep research agent goes here.
-
-The evaluation harness only needs `async def run(...)` to return a Trajectory
-whose `report.article` is the markdown/text report (with citations if you have
-them). Use `ctx.llm` and `ctx.search` — do not hard-code a model vendor.
-"""
+"""Frozen intern + FixedOrchestrator (constant breadth/depth, top-k keep)."""
 
 from __future__ import annotations
 
 from adr.agents.base import AgentContext, ResearchAgent
+from adr.agents.intern import run_intern
 from adr.core.types import ResearchTask, Trajectory
+from adr.orchestrate import build_orchestrator
 
 
 class DeepResearchAgent:
@@ -16,10 +13,17 @@ class DeepResearchAgent:
 
     def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
+        orch_name = str(self.config.get("orchestrator", "fixed"))
+        self.orchestrator = build_orchestrator(orch_name, self.config)
 
     async def run(self, task: ResearchTask, ctx: AgentContext) -> Trajectory:
-        raise NotImplementedError(
-            "Implement DeepResearchAgent.run in src/adr/agents/deep_research.py"
+        return await run_intern(
+            task,
+            ctx,
+            max_subquestions=int(self.config.get("max_subquestions", 4)),
+            top_k=int(self.config.get("top_k", 5)),
+            reads_per_round=int(self.config.get("reads_per_round", 1)),
+            orchestrator=self.orchestrator,
         )
 
 

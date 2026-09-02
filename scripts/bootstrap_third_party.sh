@@ -13,7 +13,8 @@ PARENT="$(dirname "$ROOT")"
 mkdir -p "$DEST"
 
 DRB_REPO_URL="${DRB_REPO_URL:-https://github.com/Ayanami0730/deep_research_bench.git}"
-GYM_REPO_URL="${GYM_REPO_URL:-https://github.com/cxcscmu/deepresearch_benchmarking.git}"
+GYM_REPO_URL="${GYM_REPO_URL:-https://github.com/Flitternie/deepresearchgym.git}"
+GPTR_REPO_URL="${GPTR_REPO_URL:-https://github.com/Flitternie/gpt-researcher.git}"
 
 # link_or_clone <dest-dir> <marker-file> <repo-url> <candidate-dir>...
 link_or_clone() {
@@ -44,6 +45,9 @@ link_or_clone "$DEST/deep_research_bench" "deepresearch_bench_race.py" "$DRB_REP
 
 link_or_clone "$DEST/deepresearchgym" "eval_quality_async.py" "$GYM_REPO_URL" \
   "${ADR_GYM_DIR:-}" "$PARENT/deepresearchgym" "$PARENT/deepresearch_benchmarking"
+
+link_or_clone "$DEST/gpt-researcher" "gpt_researcher/__init__.py" "$GPTR_REPO_URL" \
+  "${ADR_GPTR_DIR:-}" "$PARENT/gpt-researcher" "$PARENT/gpt_researcher"
 
 echo
 echo "Judge dependencies (install into the same env that runs adr):"

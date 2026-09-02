@@ -1,0 +1,47 @@
+# Small fixed-orchestrator B/D grid. Default mock LLM so the sweep is free.
+# Override --llm azure for a live quality-vs-cost curve.
+run_name: fixed-sweep
+output_dir: runs
+seed: 17
+concurrency: 1
+
+dataset:
+  name: deep_research_gym
+  language: en
+  limit: 8
+  query_ids: []
+
+agent:
+  name: deep_research
+  config: configs/agents/deep_research.yaml
+
+llm:
+  provider: mock
+  model: gpt-5.6-sol
+  temperature: 0.0
+  max_output_tokens: 1024
+
+search:
+  backend: mock
+  top_k: 5
+  corpus: fineweb
+  cache: true
+
+budget:
+  max_steps: 10
+  max_searches: 6
+  max_reads: 4
+  max_tokens: 16000
+  max_latency_s: 120.0
+  max_evidence: 16
+  enforce: false
+
+eval:
+  official_benches: []
+
+sweep:
+  queries: 8
+  grid:
+    - {name: narrow, max_subquestions: 2, top_k: 3, max_keep: 4}
+    - {name: default, max_subquestions: 4, top_k: 5, max_keep: 8}
+    - {name: wide, max_subquestions: 4, top_k: 8, max_keep: 12}

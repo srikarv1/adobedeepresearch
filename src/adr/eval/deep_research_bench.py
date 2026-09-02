@@ -26,7 +26,13 @@ SCRAPE_KEY = "JINA_API_KEY"
 
 
 def _judge_key() -> tuple[str, str]:
-    """Return (key_env_name, backend_name) based on LLM_BACKEND."""
+    """Return (key_env_name, backend_name) for the cloned DRB checkout.
+
+    Ayanami0730 ``utils/api.py`` reads ``GEMINI_API_KEY``. Older comments in this
+    harness assumed OpenRouter; we still accept that if Gemini is unset.
+    """
+    if os.environ.get("GEMINI_API_KEY"):
+        return "GEMINI_API_KEY", "gemini"
     backend = os.environ.get("LLM_BACKEND", "openrouter").lower()
     if backend == "openai":
         return "OPENAI_API_KEY", backend
@@ -71,8 +77,9 @@ def run_deep_research_bench(
     key_name, backend = _judge_key()
     if not (os.environ.get(key_name) or env.get(key_name)):
         result["reason"] = (
-            f"{key_name} is not set (LLM_BACKEND={backend}). "
-            f"Set {key_name}, or switch backend via LLM_BACKEND=openai|openrouter."
+            f"{key_name} is not set (backend={backend}). "
+            "This DeepResearch Bench checkout uses GEMINI_API_KEY in utils/api.py. "
+            "Set GEMINI_API_KEY, or OPENROUTER_API_KEY / OPENAI_API_KEY for forks."
         )
         return result
 

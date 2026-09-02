@@ -1,2 +1,6 @@
-# Fill this in when you implement src/adr/agents/pilot.py
 name: pilot
+orchestrator: prompted
+max_subquestions: 4
+top_k: 5
+reads_per_round: 1
+snippet_chars: 280

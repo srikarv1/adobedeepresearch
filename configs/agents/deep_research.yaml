@@ -1,2 +1,6 @@
-# Fill this in when you implement src/adr/agents/deep_research.py
 name: deep_research
+orchestrator: fixed
+max_subquestions: 4
+top_k: 5
+reads_per_round: 1
+max_keep: 8
