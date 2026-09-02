@@ -135,7 +135,32 @@ class Evidence(BaseModel):
         return raw[:max_chars]
 
 
+class PilotDecision(BaseModel):
+    """PILOT action a = (u, m, w) from the Overleaf spec.
+
+    u: stop the intern (True) or continue (False)
+    m: keep-mask — evidence ids to retain
+    w: remaining-budget weights over open branches
+    """
+
+    u: bool = False
+    m: list[str] = Field(default_factory=list)
+    w: dict[str, float] = Field(default_factory=dict)
+    rationale: str = ""
+
+    def to_step(self) -> OrchestratorAction:
+        return OrchestratorAction(
+            type=ActionType.TERMINATE if self.u else ActionType.PRUNE,
+            evidence_ids=list(self.m),
+            weights=dict(self.w),
+            terminate=self.u,
+            rationale=self.rationale,
+        )
+
+
 class OrchestratorAction(BaseModel):
+    """Trajectory step. Intern uses plan/search/write; PILOT uses prune/allocate/terminate."""
+
     type: ActionType
     subtask_id: str | None = None
     query: str | None = None

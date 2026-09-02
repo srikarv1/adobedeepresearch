@@ -10,8 +10,10 @@ from adr.agents.pilot import PilotAgent
 from adr.core.types import Query, ResearchTask
 from adr.features.extract import evidence_features
 from adr.llm.mock import MockLLM
+from adr.orchestrate.apply import apply_decision
 from adr.orchestrate.fixed import FixedOrchestrator
 from adr.orchestrate.prompted import parse_orchestration
+from adr.core.types import PilotDecision
 from adr.tools.search import MockSearch
 
 
@@ -75,7 +77,27 @@ async def test_fixed_orchestrator_caps_keep():
         ]
     )
     action = await FixedOrchestrator({"max_keep": 2}).decide(state)
-    assert len(action.evidence_ids) == 2
+    assert len(action.m) == 2
+    assert isinstance(action.u, bool)
+
+
+def test_apply_keep_mask_on_terminate():
+    from adr.core.state import ResearchState
+    from adr.core.types import Evidence, Query
+
+    state = ResearchState(Query(id="q", text="chip shortage", dataset="t"))
+    state.add_evidence(
+        [
+            Evidence(id="ev_keep", url="https://e/1", snippet="keep me", score=0.9),
+            Evidence(id="ev_drop", url="https://e/2", snippet="drop me", score=0.1),
+        ]
+    )
+    dropped = apply_decision(
+        state, PilotDecision(u=True, m=["ev_keep"], w={}, rationale="stop")
+    )
+    assert dropped == ["ev_drop"]
+    assert [ev.id for ev in state.retained()] == ["ev_keep"]
+    assert state.terminated is True
 
 
 def test_evidence_features_have_eight_keys():

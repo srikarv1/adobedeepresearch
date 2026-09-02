@@ -1,4 +1,7 @@
-"""Thin FlashResearch-style prompted keep / allocate / terminate."""
+"""Prompted keep / allocate / terminate.
+
+A thin baseline, not ParallelResearch's async tree or speculative runtime.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +10,7 @@ import re
 
 from adr.agents.base import AgentContext
 from adr.core.state import ResearchState
-from adr.core.types import ActionType, OrchestratorAction
+from adr.core.types import PilotDecision
 
 _DECISION = re.compile(r"^\s*DECISION\s*:\s*(CONTINUE|TERMINATE)\s*$", re.I | re.M)
 _KEEP = re.compile(r"^\s*KEEP\s*:\s*(.+)$", re.I | re.M)
@@ -82,11 +85,11 @@ class PromptedOrchestrator:
         self.config = config or {}
         self.snippet_chars = int(self.config.get("snippet_chars", 280))
 
-    async def decide(self, state: ResearchState, ctx: AgentContext | None = None) -> OrchestratorAction:
+    async def decide(self, state: ResearchState, ctx: AgentContext | None = None) -> PilotDecision:
         if ctx is None:
             raise RuntimeError("PromptedOrchestrator.decide needs AgentContext")
         if not state.evidence:
-            return OrchestratorAction(type=ActionType.PRUNE, rationale="empty pool")
+            return PilotDecision(rationale="empty pool")
         reply = await ctx.llm.complete(
             [
                 {"role": "system", "content": ORCHESTRATOR_SYSTEM},
@@ -95,11 +98,9 @@ class PromptedOrchestrator:
             max_tokens=256,
         )
         parsed = parse_orchestration(reply.text)
-        terminate = parsed["terminate"]
-        return OrchestratorAction(
-            type=ActionType.TERMINATE if terminate else ActionType.PRUNE,
-            evidence_ids=parsed["keep_ids"],
-            weights=parsed["weights"],
-            terminate=terminate,
+        return PilotDecision(
+            u=parsed["terminate"],
+            m=parsed["keep_ids"],
+            w=parsed["weights"],
             rationale=parsed["raw"][:400] or "prompted",
         )

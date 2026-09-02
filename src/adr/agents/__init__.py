@@ -1,4 +1,11 @@
 from adr.agents.base import AgentContext, ResearchAgent
-from adr.agents.registry import build_agent, available_agents
+from adr.agents.intern import InternAgent
+from adr.agents.registry import available_agents, build_agent
 
-__all__ = ["AgentContext", "ResearchAgent", "build_agent", "available_agents"]
+__all__ = [
+    "AgentContext",
+    "InternAgent",
+    "ResearchAgent",
+    "available_agents",
+    "build_agent",
+]
