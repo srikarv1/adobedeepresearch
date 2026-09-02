@@ -56,6 +56,11 @@ async def test_fetch_returns_empty_rather_than_raising():
     assert await GymSearch().fetch("https://example.com/a") == ""
 
 
+async def test_gym_search_requires_api_key():
+    with pytest.raises(RuntimeError, match="DEEPRESEARCHGYM_API_KEY"):
+        await GymSearch(corpus="fineweb").search("chip shortage")
+
+
 def test_hits_map_clueweb_field_names():
     payload = {
         "results": [

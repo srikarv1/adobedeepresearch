@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from adr.eval.deep_research_gym import evaluate_folder_call_args
+from adr.eval.gpt5_compat import scrub_gpt5_kwargs
 from adr.eval.repos import find_gpt_researcher
 
 
@@ -33,3 +34,14 @@ def test_gpt_researcher_reference_resolves_when_bootstrapped():
     if not located.ok:
         return
     assert (located.path / "gpt_researcher" / "__init__.py").exists()
+
+
+def test_scrub_gpt5_drops_temperature_and_seed():
+    cleaned = scrub_gpt5_kwargs(
+        {"model": "gpt-5.6-sol", "temperature": 0, "seed": 42, "max_tokens": 256}
+    )
+    assert "temperature" not in cleaned
+    assert "seed" not in cleaned
+    assert cleaned["max_completion_tokens"] == 256
+    untouched = scrub_gpt5_kwargs({"model": "gpt-4.1-mini", "temperature": 0})
+    assert untouched["temperature"] == 0

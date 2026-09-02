@@ -154,6 +154,11 @@ class GymSearch:
         return headers
 
     async def search(self, query: str, k: int = 5) -> list[SearchHit]:
+        if not self.api_key:
+            raise RuntimeError(
+                "DEEPRESEARCHGYM_API_KEY is required for live FineWeb/ClueWeb retrieval. "
+                "Request a free key from deepresearchgym@cmu.edu and put it in .env."
+            )
         params: dict[str, Any] = {"query": query, "k": k, "with_distance": "true"}
         if self.cw22_a:
             params["cw22_a"] = "true"

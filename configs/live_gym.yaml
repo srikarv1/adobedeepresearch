@@ -1,5 +1,5 @@
-# Azure intern + prompted orchestrator. Mock search unless you use configs/live_gym.yaml.
-run_name: prompted-gym
+# Live intern: Azure gpt-5.6-sol + Gym FineWeb retrieval + official Gym judges.
+run_name: live-gym
 output_dir: runs
 seed: 17
 concurrency: 1
@@ -24,7 +24,7 @@ llm:
   max_output_tokens: 4096
 
 search:
-  backend: mock
+  backend: gym
   top_k: 5
   corpus: fineweb
   cache: true
@@ -39,4 +39,5 @@ budget:
   enforce: false
 
 eval:
-  official_benches: []
+  official_benches:
+    - deep_research_gym

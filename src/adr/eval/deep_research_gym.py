@@ -19,6 +19,7 @@ from typing import Any
 from adr.core.types import Trajectory
 from adr.env import apply_azure_openai_compat_env
 from adr.eval.exporters import export_deep_research_gym
+from adr.eval.gpt5_compat import install_gpt5_openai_compat
 from adr.eval.repos import find_deep_research_gym, find_key_points
 from adr.eval.scoring import (
     aggregate_gym_citation,
@@ -114,6 +115,7 @@ def run_deep_research_gym(
     result["repo"] = str(gym_root)
 
     apply_azure_openai_compat_env()
+    install_gpt5_openai_compat()
     if not os.environ.get("OPENAI_API_KEY"):
         result["reason"] = (
             "OPENAI_API_KEY is not set; the Gym judges cannot run. "
