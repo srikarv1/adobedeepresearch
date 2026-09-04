@@ -1,4 +1,4 @@
-# deepResearchAgent harness
+# deepResearchAgent
 
 An evaluation harness for testing deep research agent architectures on **DeepResearch Bench** (RACE + FACT) and **DeepResearchGym** (quality, key-point recall, citation faithfulness).
 
